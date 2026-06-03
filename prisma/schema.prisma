@@ -13,11 +13,10 @@ datasource db {
 }
 
 model User {
-  id            String @id @default(cuid())
+  id            String @id
 
   name          String
   email         String @unique
-  password      String
 
   uploads       Upload[]
   transactions  Transaction[]
@@ -26,33 +25,30 @@ model User {
 }
 
 model Upload {
-  id          String @id @default(cuid())
-
-  fileUrl     String
-  fileType    String
-
-  processed   Boolean @default(false)
-
-  userId      String
-  user        User @relation(fields: [userId], references: [id])
-
-  createdAt   DateTime @default(now())
+  id           String        @id @default(cuid())
+  fileUrl      String
+  fileType     String
+  source       Source        // RECEIPT | SCREENSHOT | STATEMENT
+  status       String        @default("pending") // pending | processing | done | failed
+  processed    Boolean       @default(false)
+  userId       String
+  user         User          @relation(fields: [userId], references: [id])
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
 }
 
 model Transaction {
-  id            String @id @default(cuid())
-
+  id            String    @id @default(cuid())
   merchant      String
   amount        Float
-
   category      Category
-
   transactionAt DateTime
-
+  source        Source
+  uploadId      String?
+  upload        Upload?   @relation(fields: [uploadId], references: [id])
   userId        String
-  user          User @relation(fields: [userId], references: [id])
-
-  createdAt     DateTime @default(now())
+  user          User      @relation(fields: [userId], references: [id])
+  createdAt     DateTime  @default(now())
 }
 
 enum Category {
