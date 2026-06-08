@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { extractTextFromImage } from "../services/gemini.service";
+import { extractTransactionData } from "../services/gemini.service";
 
 export const uploadFiles = async (
   req: Request,
@@ -18,7 +18,7 @@ export const uploadFiles = async (
     const results = await Promise.all(
       files.map(async (file) => {
         const extractedText =
-          await extractTextFromImage(file);
+          await extractTransactionData(file);
 
         return {
           fileName: file.originalname,

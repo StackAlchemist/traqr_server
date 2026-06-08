@@ -39,15 +39,28 @@ model Upload {
 
 model Transaction {
   id            String    @id @default(cuid())
-  merchant      String
-  amount        Float
-  category      Category
-  transactionAt DateTime
+
+  merchant      String?
+  description   String?
+
+  amount        Float?
+
+  category      Category?
+
+  transactionAt DateTime?
+
   source        Source
+
+  rawText       String?
+
+  confidence    Float?
+
   uploadId      String?
   upload        Upload?   @relation(fields: [uploadId], references: [id])
+
   userId        String
   user          User      @relation(fields: [userId], references: [id])
+
   createdAt     DateTime  @default(now())
 }
 
@@ -58,6 +71,10 @@ enum Category {
   BILLS
   HEALTH
   EDUCATION
+  DATA
+  AIRTIME
+  TRANSFER
+  ENTERTAINMENT
   OTHER
 }
 
