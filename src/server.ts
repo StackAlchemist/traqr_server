@@ -5,13 +5,16 @@ import { requireAuth } from "./middleware/auth.middleware";
 import dotenv from "dotenv";
 dotenv.config();
 import uploadRouter from "./routes/upload.route";
+import transactionRouter from "./routes/transaction.routes";
 
 const app = express();
 
-app.use("/uploads", uploadRouter);
 app.use(cors());
 app.use(express.json());
 app.use(clerkMiddleware());
+
+app.use("/uploads", uploadRouter);
+app.use("/transactions", transactionRouter);
 
 app.get("/", (req, res) => {
     res.json({
