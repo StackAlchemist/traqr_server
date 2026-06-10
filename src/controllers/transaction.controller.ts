@@ -40,3 +40,47 @@ export const getTransactions = async (req: Request, res: Response) => {
       });
     }
 }
+
+export const getTransactionById = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const transaction = await prisma.transaction.findUnique({
+            where: { id },
+        });
+        if (!transaction) {
+            return res.status(404).json({
+                success: false,
+                error: "Transaction not found",
+            });
+        }
+        return res.status(200).json({
+            success: true,
+            data: transaction,
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({
+            success: false,
+            error: "Failed to fetch transaction",
+        });
+    }
+}
+
+export const deleteTransaction = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const transaction = await prisma.transaction.delete({
+            where: { id },
+        });
+        return res.status(200).json({
+            success: true,
+            data: transaction,
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({
+            success: false,
+            error: "Failed to delete transaction",
+        });
+    }
+}
