@@ -35,9 +35,15 @@ export const uploadFiles = async (
     );
 
     // Convert Gemini JSON strings into JavaScript objects
-    const extractedTransactions = results.map(
-      (result) => JSON.parse(result.extractedText)
-    );
+    const extractedTransactions = results.map((result) => {
+      if (!result.extractedText) {
+        throw new Error(
+          `Failed to extract text from ${result.fileName}`
+        );
+      }
+
+      return JSON.parse(result.extractedText);
+    });
 
     // Save all transactions
     await prisma.transaction.createMany({

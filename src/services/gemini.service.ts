@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import type { Transaction } from "../generated/prisma/client";
 
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY!,
@@ -62,7 +63,7 @@ Rules:
     ],
   });
 
-  return response.text;
+  return response.text ?? "";
 };
 
 export const aiInsight = async (
