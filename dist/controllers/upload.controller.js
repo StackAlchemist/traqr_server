@@ -7,7 +7,7 @@ exports.uploadFiles = void 0;
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const gemini_service_1 = require("../services/gemini.service");
 // Temporary user until auth is implemented
-const TEST_USER_ID = "TEST_USER_ID";
+const TEST_USER_ID = process.env.TEST_USER_ID ?? "TEST_USER_ID";
 const uploadFiles = async (req, res) => {
     try {
         // Get uploaded files from multer

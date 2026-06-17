@@ -27,7 +27,7 @@ app.get("/test", auth_middleware_1.requireAuth, (req, res) => {
     const { userId } = (0, express_2.getAuth)(req);
     res.json({ message: "You're in!", userId });
 });
-app.listen(5000, () => {
+app.listen(5000, "0.0.0.0", () => {
     console.log('Server is running on port 5000');
 });
 exports.default = app;

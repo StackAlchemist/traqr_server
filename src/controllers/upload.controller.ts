@@ -3,7 +3,7 @@ import prisma from "../lib/prisma";
 import { extractTransactionData } from "../services/gemini.service";
 
 // Temporary user until auth is implemented
-const TEST_USER_ID = "TEST_USER_ID";
+const TEST_USER_ID = process.env.TEST_USER_ID ?? "TEST_USER_ID";
 
 export const uploadFiles = async (
   req: Request,

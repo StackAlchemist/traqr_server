@@ -1,10 +1,21 @@
 import { Request, Response } from "express";
 import prisma from "../lib/prisma";
 import { aiInsight } from "../services/gemini.service";
-import { Category } from "../generated/prisma/client";
 
 const TEST_USER_EMAIL = process.env.TEST_USER_EMAIL;
-const TEST_USER_ID = process.env.TEST_USER_ID;
+const TEST_USER_ID = process.env.TEST_USER_ID ?? "TEST_USER_ID";
+
+const getMonthRange = (year: number, month: number) => ({
+    start: new Date(year, month, 1),
+    end: new Date(year, month + 1, 1),
+});
+
+const formatChartDay = (day: Date | string): string => {
+    if (day instanceof Date) {
+        return day.toISOString().slice(0, 10);
+    }
+    return String(day).slice(0, 10);
+};
 export const getTransactions = async (req: Request, res: Response) => {
     try {
 
@@ -150,7 +161,7 @@ export const getTopCategories = async (req: Request, res: Response) => {
         const grouped = await prisma.transaction.groupBy({
             by: ["category"],
             where: {
-                userId: req.auth?.userId,  // scope to current user
+                userId: TEST_USER_ID,
             },
             _sum: {
                 amount: true,
@@ -186,45 +197,117 @@ export const getTopCategories = async (req: Request, res: Response) => {
 
 export const getSpendingChart = async (req: Request, res: Response) => {
     try {
-      const now = new Date()
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-  
-      const transactions = await prisma.transaction.findMany({
-        where: {
-          userId: TEST_USER_ID,
-          category: { not: Category.INCOME },
-          transactionAt: { gte: startOfMonth, not: null },
-        },
-        select: { transactionAt: true, amount: true },
-        orderBy: { transactionAt: "asc" },
-      })
-  
-      // Group by date in JS
-      const map = new Map<string, number>()
-      for (const t of transactions) {
-        const day = t.transactionAt!.toISOString().split("T")[0]
-        map.set(day, (map.get(day) ?? 0) + t.amount)
-      }
-  
-      const data = [...map.entries()].map(([day, total]) => ({ day, total }))
-  
-      return res.status(200).json({ success: true, data })
+        const user = await prisma.user.findUnique({
+            where: { email: TEST_USER_EMAIL },
+        });
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: "User not found",
+            });
+        }
+
+        const queryYear = req.query.year ? Number(req.query.year) : undefined;
+        const queryMonth = req.query.month ? Number(req.query.month) : undefined;
+
+        let year: number;
+        let month: number;
+
+        if (
+            queryYear &&
+            queryMonth &&
+            queryMonth >= 1 &&
+            queryMonth <= 12
+        ) {
+            year = queryYear;
+            month = queryMonth - 1;
+        } else {
+            const now = new Date();
+            year = now.getFullYear();
+            month = now.getMonth();
+
+            const { start, end } = getMonthRange(year, month);
+
+            const countThisMonth = await prisma.transaction.count({
+                where: {
+                    userId: user.id,
+                    OR: [
+                        { transactionAt: { gte: start, lt: end } },
+                        {
+                            transactionAt: null,
+                            createdAt: { gte: start, lt: end },
+                        },
+                    ],
+                },
+            });
+
+            if (countThisMonth === 0) {
+                const latest = await prisma.transaction.findFirst({
+                    where: { userId: user.id },
+                    orderBy: [
+                        { transactionAt: "desc" },
+                        { createdAt: "desc" },
+                    ],
+                });
+
+                if (latest) {
+                    const effectiveDate =
+                        latest.transactionAt ?? latest.createdAt;
+                    year = effectiveDate.getFullYear();
+                    month = effectiveDate.getMonth();
+                }
+            }
+        }
+
+        const { start, end } = getMonthRange(year, month);
+
+        const grouped = await prisma.$queryRaw<{ day: Date; total: number }[]>`
+            SELECT
+                (COALESCE("transactionAt", "createdAt")::date) AS day,
+                SUM(amount) AS total
+            FROM "Transaction"
+            WHERE
+                "userId" = ${user.id}
+                AND COALESCE("transactionAt", "createdAt") >= ${start}
+                AND COALESCE("transactionAt", "createdAt") < ${end}
+            GROUP BY (COALESCE("transactionAt", "createdAt")::date)
+            ORDER BY day ASC
+        `;
+
+        const data = grouped.map((g) => ({
+            day: formatChartDay(g.day),
+            total: Number(g.total),
+        }));
+
+        return res.status(200).json({
+            success: true,
+            data,
+            meta: { year, month: month + 1 },
+        });
     } catch (error) {
-      console.error(error)
-      return res.status(500).json({ success: false, error: "Failed to fetch chart data" })
+        console.error(error);
+        return res.status(500).json({
+            success: false,
+            error: "Failed to fetch chart data",
+        });
     }
-  }
-  export const getRecentTransactions = async (req: Request, res: Response) => {
+};
+
+export const getRecentTransactions = async (req: Request, res: Response) => {
     try {
-      const transactions = await prisma.transaction.findMany({
-        where: { userId: TEST_USER_ID },
-        orderBy: { transactionAt: "desc" },
-        take: 5,
-      })
-  
-      return res.status(200).json({ success: true, data: transactions })
+        const transactions = await prisma.transaction.findMany({
+            where: { userId: TEST_USER_ID },
+            orderBy: { transactionAt: "desc" },
+            take: 5,
+        });
+
+        return res.status(200).json({ success: true, data: transactions });
     } catch (error) {
-      console.error(error)
-      return res.status(500).json({ success: false, error: "Failed to fetch recent transactions" })
+        console.error(error);
+        return res.status(500).json({
+            success: false,
+            error: "Failed to fetch recent transactions",
+        });
     }
-  }
+};

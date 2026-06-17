@@ -3,11 +3,21 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getAIInsight = exports.getBigBuys = exports.deleteTransaction = exports.getTransactionById = exports.getTransactions = void 0;
+exports.getRecentTransactions = exports.getSpendingChart = exports.getTopCategories = exports.getAIInsight = exports.getBigBuys = exports.deleteTransaction = exports.getTransactionById = exports.getTransactions = void 0;
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const gemini_service_1 = require("../services/gemini.service");
 const TEST_USER_EMAIL = process.env.TEST_USER_EMAIL;
-const TEST_USER_ID = process.env.TEST_USER_ID;
+const TEST_USER_ID = process.env.TEST_USER_ID ?? "TEST_USER_ID";
+const getMonthRange = (year, month) => ({
+    start: new Date(year, month, 1),
+    end: new Date(year, month + 1, 1),
+});
+const formatChartDay = (day) => {
+    if (day instanceof Date) {
+        return day.toISOString().slice(0, 10);
+    }
+    return String(day).slice(0, 10);
+};
 const getTransactions = async (req, res) => {
     try {
         const user = await prisma_1.default.user.findUnique({
@@ -145,3 +155,143 @@ const getAIInsight = async (req, res) => {
     }
 };
 exports.getAIInsight = getAIInsight;
+const getTopCategories = async (req, res) => {
+    try {
+        const grouped = await prisma_1.default.transaction.groupBy({
+            by: ["category"],
+            where: {
+                userId: TEST_USER_ID,
+            },
+            _sum: {
+                amount: true,
+            },
+            orderBy: {
+                _sum: {
+                    amount: "desc", // highest spender first
+                },
+            },
+            take: 5, // top 5 only
+        });
+        const total = grouped.reduce((sum, c) => sum + (c._sum.amount ?? 0), 0);
+        const data = grouped.map((c) => ({
+            category: c.category,
+            total: c._sum.amount ?? 0,
+            percentage: total > 0
+                ? Math.round(((c._sum.amount ?? 0) / total) * 100)
+                : 0,
+        }));
+        return res.status(200).json({ success: true, data });
+    }
+    catch (error) {
+        console.error(error);
+        return res.status(500).json({
+            success: false,
+            error: "Failed to fetch top categories",
+        });
+    }
+};
+exports.getTopCategories = getTopCategories;
+const getSpendingChart = async (req, res) => {
+    try {
+        const user = await prisma_1.default.user.findUnique({
+            where: { email: TEST_USER_EMAIL },
+        });
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: "User not found",
+            });
+        }
+        const queryYear = req.query.year ? Number(req.query.year) : undefined;
+        const queryMonth = req.query.month ? Number(req.query.month) : undefined;
+        let year;
+        let month;
+        if (queryYear &&
+            queryMonth &&
+            queryMonth >= 1 &&
+            queryMonth <= 12) {
+            year = queryYear;
+            month = queryMonth - 1;
+        }
+        else {
+            const now = new Date();
+            year = now.getFullYear();
+            month = now.getMonth();
+            const { start, end } = getMonthRange(year, month);
+            const countThisMonth = await prisma_1.default.transaction.count({
+                where: {
+                    userId: user.id,
+                    OR: [
+                        { transactionAt: { gte: start, lt: end } },
+                        {
+                            transactionAt: null,
+                            createdAt: { gte: start, lt: end },
+                        },
+                    ],
+                },
+            });
+            if (countThisMonth === 0) {
+                const latest = await prisma_1.default.transaction.findFirst({
+                    where: { userId: user.id },
+                    orderBy: [
+                        { transactionAt: "desc" },
+                        { createdAt: "desc" },
+                    ],
+                });
+                if (latest) {
+                    const effectiveDate = latest.transactionAt ?? latest.createdAt;
+                    year = effectiveDate.getFullYear();
+                    month = effectiveDate.getMonth();
+                }
+            }
+        }
+        const { start, end } = getMonthRange(year, month);
+        const grouped = await prisma_1.default.$queryRaw `
+            SELECT
+                (COALESCE("transactionAt", "createdAt")::date) AS day,
+                SUM(amount) AS total
+            FROM "Transaction"
+            WHERE
+                "userId" = ${user.id}
+                AND COALESCE("transactionAt", "createdAt") >= ${start}
+                AND COALESCE("transactionAt", "createdAt") < ${end}
+            GROUP BY (COALESCE("transactionAt", "createdAt")::date)
+            ORDER BY day ASC
+        `;
+        const data = grouped.map((g) => ({
+            day: formatChartDay(g.day),
+            total: Number(g.total),
+        }));
+        return res.status(200).json({
+            success: true,
+            data,
+            meta: { year, month: month + 1 },
+        });
+    }
+    catch (error) {
+        console.error(error);
+        return res.status(500).json({
+            success: false,
+            error: "Failed to fetch chart data",
+        });
+    }
+};
+exports.getSpendingChart = getSpendingChart;
+const getRecentTransactions = async (req, res) => {
+    try {
+        const transactions = await prisma_1.default.transaction.findMany({
+            where: { userId: TEST_USER_ID },
+            orderBy: { transactionAt: "desc" },
+            take: 5,
+        });
+        return res.status(200).json({ success: true, data: transactions });
+    }
+    catch (error) {
+        console.error(error);
+        return res.status(500).json({
+            success: false,
+            error: "Failed to fetch recent transactions",
+        });
+    }
+};
+exports.getRecentTransactions = getRecentTransactions;
