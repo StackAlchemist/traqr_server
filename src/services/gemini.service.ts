@@ -36,6 +36,8 @@ The image may contain:
 - Store receipts
 - Bank statements
 
+you can infer category from the name of the recipient/merchant if not stated in description. eg. d & d stitches = SHOPPING, bodija intl school = EDUCATION and so on
+
 Extract the information and return ONLY valid JSON.
 
 Schema:
